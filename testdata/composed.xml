@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Synthetic FAST 1.1 template set used by the test suite.
+
+  It is not any exchange's published template file; it is written to exercise
+  every composition feature the loader supports:
+
+    * reference-only building blocks (templates with no id) that are inlined
+      via <templateRef> rather than registered for decoding
+    * nested templateRef expansion (Header -> HeaderBase)
+    * <typeRef> annotations, which carry no wire meaning and must be dropped
+    * the tail operator on a string field
+    * sequences with an explicit <length> and with a templateRef element block
+    * the constant / copy / default / increment / delta operators
+-->
+<templates xmlns="http://www.fixprotocol.org/ns/fast/td/1.1">
+
+  <!-- ===== reference-only building blocks (no id) ===== -->
+
+  <template name="HeaderBase">
+    <string name="MessageType"/>
+    <string name="SendingTime"><tail/></string>
+  </template>
+
+  <template name="Header">
+    <templateRef name="HeaderBase"/>
+  </template>
+
+  <!-- Element block shared by the snapshot and incremental sequences. -->
+  <template name="EntryBlock">
+    <typeRef name="MDEntry"/>
+    <string name="UpdateAction"><copy/></string>
+    <string name="EntryType"/>
+    <decimal name="EntryPrice" presence="optional"/>
+    <uInt32 name="EntrySize" presence="optional"/>
+  </template>
+
+  <!-- ===== registered application templates ===== -->
+
+  <template name="Logon" id="1">
+    <typeRef name="Logon"/>
+    <templateRef name="Header"/>
+    <uInt32 name="HeartBtInt"/>
+    <string name="Username"/>
+    <string name="Password"/>
+    <string name="AppID" presence="optional"/>
+    <uInt32 name="SessionStatus" presence="optional"/>
+  </template>
+
+  <template name="DataRequest" id="7">
+    <typeRef name="MarketDataRequest"/>
+    <templateRef name="Header"/>
+    <string name="ReqID"/>
+    <uInt32 name="SubscriptionType"/>
+    <sequence name="NoEntryTypes">
+      <length name="NoEntryTypesLen"/>
+      <string name="EntryType"><copy/></string>
+      <string name="EntryTime" presence="optional"/>
+    </sequence>
+    <sequence name="RelatedSymbol">
+      <length name="NoRelatedSym"/>
+      <string name="ProductComplex"/>
+    </sequence>
+  </template>
+
+  <template name="Snapshot" id="18">
+    <typeRef name="MarketDataSnapshotFullRefresh"/>
+    <templateRef name="Header"/>
+    <uInt32 name="InstrumentID"/>
+    <uInt32 name="RefFlag" presence="optional"/>
+    <sequence name="SnapshotEntries">
+      <length name="NoSnapshotEntries"/>
+      <templateRef name="EntryBlock"/>
+    </sequence>
+  </template>
+
+  <template name="IncRefresh" id="20">
+    <typeRef name="MarketDataIncrementalRefresh"/>
+    <templateRef name="Header"/>
+    <sequence name="NoEntries">
+      <length name="NoEntriesLen"/>
+      <templateRef name="EntryBlock"/>
+    </sequence>
+  </template>
+
+  <!-- Operator coverage, decode-only. -->
+  <template name="Operators" id="30">
+    <uInt32 name="Const"><constant value="7"/></uInt32>
+    <uInt32 name="Copied"><copy/></uInt32>
+    <uInt32 name="Defaulted"><default value="3"/></uInt32>
+    <uInt32 name="Seq"><increment value="1"/></uInt32>
+    <int64  name="Delta"><delta/></int64>
+    <decimal name="Price"><default value="107.15"/></decimal>
+  </template>
+
+</templates>
