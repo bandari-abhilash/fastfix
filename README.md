@@ -22,6 +22,34 @@ go get github.com/bandari-abhilash/fastfix
 - **Encode** — client-initiated session messages (Logon, MarketDataRequest,
   Logout, ...) for a TCP request or recovery channel.
 
+## Performance
+
+Measured on a single core of an Apple M5 with Go 1.26 (`go test -bench . -benchmem`,
+median of 5 runs):
+
+| Benchmark | Time | Throughput | Allocs |
+|---|---|---|---|
+| Decode market-data packet (1 message, 10 book entries, 174 B) | 2.3 µs | **~430k packets/s · ~4.3M entries/s** | 111 / 5.1 KB |
+| ...and read price + size from every entry | 2.5 µs | ~400k packets/s | 111 / 5.1 KB |
+| Decode Logon (35 B) | 195 ns | ~5M messages/s | 12 / 488 B |
+| Encode Logon | 131 ns | ~7.6M messages/s | 8 / 192 B |
+
+Each packet is decoded with a dictionary reset first, as a UDP feed handler
+would. The template is a typical incremental refresh: `constant`,
+`increment`, `copy` and `default` operators, optional decimals and a
+sequence. Decoders share nothing but the read-only `Registry`, so you can run
+one `Decoder` per feed or channel on its own goroutine.
+
+Allocations are the main cost: every message and sequence entry is a
+`map[string]any`. If GC pauses matter for your latency budget, size your
+`GOGC` with that in mind.
+
+Reproduce with:
+
+```
+go test -run '^$' -bench . -benchmem
+```
+
 ## Quick start
 
 ```go
