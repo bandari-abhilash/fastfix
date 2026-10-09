@@ -31,24 +31,45 @@ operators, optional decimals and a sequence. Each packet is decoded after a
 dictionary reset, as a UDP feed handler would, and every entry's price and
 size is read back.
 
-### Compared with goFAST
+### Compared with other implementations
 
-[goFAST](https://github.com/co11ter/goFAST) is the other pure-Go FAST
-library. Both decode the identical bytes, and a test checks that they agree
-on every value. Single core:
+Every implementation below decodes the identical bytes
+(`benchmarks/testdata/`), resets its dictionary before each packet, and
+reads every price and size. Each harness exits with an error unless its
+checksum matches, so a fast wrong decode can't count. Single core, median of
+6 runs:
 
 ```
-                                  time/packet    packets/s    allocs/packet
-fastfix                               2.5 µs        400k           111
-goFAST, hand-written Receiver         2.9 µs        340k            65
-goFAST, reflection                    5.2 µs        190k           146
+                                          time/packet   heap/packet
+mFAST (C++), generated code                  0.27 µs        0
+mFAST (C++), runtime XML                     0.67 µs        0
+fastlib 0.3.8 (Rust), callback *             1.87 µs      283 B
+OpenFAST 1.1.1 (Java 17)                     2.41 µs      5.7 KB
+fastfix (Go)                                 2.55 µs      5.3 KB
+goFAST (Go), hand-written Receiver           2.92 µs      1.5 KB
+fastlib 0.3.8 (Rust), serde structs          4.81 µs       13 KB
+goFAST (Go), reflection                      5.22 µs      3.0 KB
 ```
 
-fastfix is 1.2× faster than goFAST's hand-written `Receiver` path, which
-needs a per-template struct and a field-by-field setter, and 2.1× faster than
-goFAST's reflection path. goFAST's `Receiver` path allocates less. Neither
-library is close to the limit of what Go can do: both allocate on every
-field.
+\* streams values to a callback without building a message, so it does less
+work than the others.
+
+What this shows:
+
+- **fastfix is the fastest Go FAST decoder measured:** 1.15× faster than
+  goFAST's hand-written path and 2× faster than its reflection path, while
+  loading templates at runtime and needing no per-template code.
+- **It is level with OpenFAST**, the Java reference implementation (2.41 µs
+  with ParallelGC and a fixed heap, 2.56 µs with JVM defaults).
+- **mFAST is 4–10× faster** and allocates nothing per packet. It decodes into
+  storage it reuses, while fastfix builds a fresh `map[string]any` tree per
+  message. That gap is the target for future versions.
+
+Fairness notes: OpenFAST ran on JDK 17 after a 5 s JIT warm-up. Rust was
+built with LTO; fastlib needs an `id` on every field, so its harness adds
+them in memory (ids never appear on the wire). mFAST was built at `-O3`.
+About half of mFAST's runtime-XML time is its by-name field lookup.
+goFAST returns decimals as `float64`; the others are exact.
 
 ### Multiple cores
 
@@ -80,10 +101,13 @@ encode Logon            131 ns     ~7.6M messages/s     8 allocs
 go test -run '^$' -bench . -benchmem                     # fastfix only
 cd benchmarks && go test -bench . -benchmem              # vs goFAST
 cd benchmarks && go test -bench Parallel -cpu 1,2,4,6,10 # multi-core
+benchmarks/java/run.sh                                   # OpenFAST (needs a JDK)
+benchmarks/rust/run.sh                                   # fastlib (needs cargo)
+benchmarks/cpp/run.sh                                    # mFAST (needs cmake, boost)
 ```
 
-The comparison lives in its own module under `benchmarks/`, so fastfix
-itself has no dependencies.
+The comparisons live under `benchmarks/` in their own module and build
+directories, so fastfix itself has no dependencies.
 
 ## Quick start
 

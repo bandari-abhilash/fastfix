@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xmlns="http://www.fixprotocol.org/ns/fast/td/1.1">
+  <template name="MDIncRefresh" id="10">
+    <string name="MessageType"><constant value="X"/></string>
+    <uInt32 name="MsgSeqNum"><increment/></uInt32>
+    <uInt64 name="SendingTime"><copy/></uInt64>
+    <sequence name="MDEntries">
+      <length name="NoMDEntries"/>
+      <uInt32 name="MDUpdateAction"><copy/></uInt32>
+      <string name="MDEntryType"><copy/></string>
+      <uInt32 name="SecurityID"><copy/></uInt32>
+      <uInt32 name="RptSeq"><increment/></uInt32>
+      <decimal name="MDEntryPx" presence="optional"/>
+      <int64 name="MDEntrySize" presence="optional"/>
+      <uInt32 name="MDPriceLevel" presence="optional"><default/></uInt32>
+    </sequence>
+  </template>
+</templates>

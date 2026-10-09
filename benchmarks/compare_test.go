@@ -83,19 +83,27 @@ func fastfixDecoder(tb testing.TB) *fastfix.Decoder {
 	return fastfix.NewDecoder(reg)
 }
 
-// fastfixDecode decodes one packet and returns the sum of price*size, which
-// forces every value to be read.
-func fastfixDecode(dec *fastfix.Decoder, pkt []byte) (float64, error) {
+// fastfixDecode decodes one packet and returns the checksum the other-language
+// harnesses also compute: the sum of price (as a mantissa at exponent -2)
+// times size, in exact integer arithmetic. It forces every value to be read.
+func fastfixDecode(dec *fastfix.Decoder, pkt []byte) (int64, error) {
 	dec.Ctx.Reset()
 	msgs, err := dec.DecodePacket(pkt)
 	if err != nil {
 		return 0, err
 	}
-	var sum float64
+	var sum int64
 	for _, e := range msgs[0].Sequence("MDEntries") {
 		px, _ := e.Get("MDEntryPx").(fastfix.Decimal)
 		sz, _ := e.Int("MDEntrySize")
-		sum += float64(px.Mantissa) * math.Pow10(int(px.Exponent)) * float64(sz)
+		m := px.Mantissa
+		for exp := px.Exponent; exp > -2; exp-- {
+			m *= 10
+		}
+		for exp := px.Exponent; exp < -2; exp++ {
+			m /= 10
+		}
+		sum += m * sz
 	}
 	return sum, nil
 }
@@ -252,7 +260,10 @@ func TestAllDecodersAgree(t *testing.T) {
 
 // ---- benchmarks: reset dictionary, decode one packet, read every price and size ----
 
-var sink float64
+var (
+	sink  float64
+	isink int64
+)
 
 func BenchmarkFastfix(b *testing.B) {
 	pkt := packet(b)
@@ -265,7 +276,7 @@ func BenchmarkFastfix(b *testing.B) {
 		if err != nil {
 			b.Fatal(err)
 		}
-		sink += s
+		isink += s
 	}
 }
 
@@ -310,7 +321,7 @@ func BenchmarkFastfixParallel(b *testing.B) {
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		dec := fastfixDecoder(b)
-		var local float64
+		var local int64
 		for pb.Next() {
 			s, err := fastfixDecode(dec, pkt)
 			if err != nil {
@@ -322,4 +333,14 @@ func BenchmarkFastfixParallel(b *testing.B) {
 		_ = local
 	})
 	b.ReportMetric(float64(b.N)/b.Elapsed().Seconds(), "packets/s")
+}
+
+func TestFastfixChecksum(t *testing.T) {
+	got, err := fastfixDecode(fastfixDecoder(t), packet(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != wantChecksum {
+		t.Fatalf("checksum = %d, want %d", got, wantChecksum)
+	}
 }
